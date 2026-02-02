@@ -7,14 +7,16 @@ import tempfile
 st.set_page_config(page_title="Image Steganography", layout="centered")
 st.title("🔐 Image Steganography Tool")
 
-# --- Helpers ---
+# ------------------ Helper Functions ------------------
+
 def splitbyte(by):
     return by >> 5, (by >> 2) & 7, by & 3
 
 def merge_bits(bits):
     return (((bits[0] << 3) | bits[1]) << 2) | bits[2]
 
-# --- Embed Message ---
+# ------------------ Embed Message ------------------
+
 def embed_message(image, message):
     data = [len(message)] + [ord(c) for c in message]
     img = image.copy()
@@ -31,14 +33,15 @@ def embed_message(image, message):
             img[r, c, 1] &= 248
             img[r, c, 2] &= 248
 
-            img[r, c, 0] |= bits[2]
-            img[r, c, 1] |= bits[1]
-            img[r, c, 2] |= bits[0]
+            img[r, c, 0] |= bits[2]   # Blue
+            img[r, c, 1] |= bits[1]   # Green
+            img[r, c, 2] |= bits[0]   # Red
 
             idx += 1
     return img
 
-# --- Extract Message ---
+# ------------------ Extract Message ------------------
+
 def extract_message(image):
     width = image.shape[1]
 
@@ -64,28 +67,46 @@ def extract_message(image):
 
     return "".join(chars)
 
-# --- UI ---
-uploaded_image = st.file_uploader("📤 Upload an image", type=["png", "jpg", "jpeg"])
-message = st.text_input("📝 Enter message to hide")
+# ------------------ UI ------------------
+
+option = st.radio("Select Operation", ["Hide Message", "Extract Message"])
+
+uploaded_image = st.file_uploader("📤 Upload Image", type=["png", "jpg", "jpeg"])
 
 if uploaded_image:
     image = Image.open(uploaded_image).convert("RGB")
     img_np = np.array(image)
-    st.image(image, caption="Original Image", use_column_width=True)
+    st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    capacity = img_np.shape[0] * img_np.shape[1] - 1
+    if option == "Hide Message":
+        message = st.text_area("📝 Enter message to hide")
 
-    if st.button("🔒 Hide Message"):
-        if len(message) > capacity:
-            st.error("❌ Message too long for this image.")
-        else:
-            stego = embed_message(img_np, message)
-            st.image(stego, caption="Stego Image", use_column_width=True)
+        capacity = img_np.shape[0] * img_np.shape[1] - 1
+        st.info(f"📏 Max characters allowed: {capacity}")
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                cv2.imwrite(tmp.name, cv2.cvtColor(stego, cv2.COLOR_RGB2BGR))
-                st.download_button("⬇ Download Stego Image", open(tmp.name, "rb"), "stego.png")
+        if st.button("🔒 Hide Message"):
+            if len(message) == 0:
+                st.error("❌ Message cannot be empty.")
+            elif len(message) > capacity:
+                st.error("❌ Message too long for this image.")
+            else:
+                stego = embed_message(img_np, message)
+                st.image(stego, caption="Stego Image", use_column_width=True)
 
-    if st.button("🔓 Extract Message"):
-        extracted = extract_message(img_np)
-        st.success(f"Hidden Message: {extracted}")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    cv2.imwrite(tmp.name, cv2.cvtColor(stego, cv2.COLOR_RGB2BGR))
+                    st.download_button(
+                        "⬇ Download Stego Image",
+                        open(tmp.name, "rb"),
+                        "stego.png"
+                    )
+
+                st.success("✅ Message hidden successfully!")
+
+    else:  # Extract Mode
+        if st.button("🔓 Extract Message"):
+            try:
+                extracted = extract_message(img_np)
+                st.success(f"🔑 Hidden Message: {extracted}")
+            except:
+                st.error("❌ No hidden message found or invalid image.")
